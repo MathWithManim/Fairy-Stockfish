@@ -1,4 +1,4 @@
-name: Build AndroidFairy1
+name: Build AndroidFairy
 
 on:
   workflow_dispatch:
@@ -18,7 +18,6 @@ jobs:
       - name: Install Android NDK
         run: |
           sdkmanager --install "ndk;27.2.12479018"
-
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
 
       - name: Verify Android NDK
@@ -34,6 +33,162 @@ jobs:
           TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
 
           test -f "$TOOLCHAIN/aarch64-linux-android21-clang++"
+          test -f "$TOOLCHAIN/llvm-strip"
+
+          echo "Android compiler:"
+          "$TOOLCHAIN/aarch64-linux-android21-clang++" --version
+
+      - name: Build AndroidFairy
+        working-directory: src
+        env:
+          EXTRACXXFLAGS: >-
+            -flto=full
+            -fomit-frame-pointer
+            -ffunction-sections
+            -fdata-sections
+
+          EXTRALDFLAGS: >-
+            -flto=full
+            -Wl,--gc-sections
+
+        run: |
+          echo "========================================"
+          echo " Building AndroidFairy"
+          echo " Target: ARM64 / ARMv8"
+          echo " Device: Huawei nova 11i"
+          echo " CPU: Qualcomm Snapdragon 680"
+          echo "========================================"
+
+          export NDK_PATH="$ANDROID_NDK_HOME"
+          export TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
+
+          export PATH="$TOOLCHAIN:$PATH"
+
+          echo "NDK_PATH=$NDK_PATH"
+          echo "TOOLCHAIN=$TOOLCHAIN"
+
+          echo "========================================"
+          echo " Checking compiler"
+          echo "========================================"
+
+          which aarch64-linux-android21-clang++
+          aarch64-linux-android21-clang++ --version
+
+          echo "========================================"
+          echo " Cleaning previous build"
+          echo "========================================"
+
+          make clean
+
+          echo "========================================"
+          echo " Compiling AndroidFairy"
+          echo "========================================"
+
+          make -j"$(nproc)" \
+            build \
+            ARCH=armv8 \
+            COMP=ndk \
+            optimize=yes
+
+          echo "========================================"
+          echo " Renaming binary"
+          echo "========================================"
+
+          mv fairy-stockfish androidfairy
+          chmod +x androidfairy
+
+      - name: Strip AndroidFairy
+        working-directory: src
+        run: |
+          echo "========================================"
+          echo " Stripping binary"
+          echo "========================================"
+
+          TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+
+          "$TOOLCHAIN/llvm-strip" \
+            --strip-all \
+            androidfairy
+
+          chmod +x androidfairy
+
+      - name: Verify AndroidFairy
+        working-directory: src
+        run: |
+          echo "========================================"
+          echo " Binary information"
+          echo "========================================"
+
+          file androidfairy
+
+          echo ""
+          echo "Binary size:"
+          ls -lh androidfairy
+
+          echo ""
+          echo "========================================"
+          echo " UCI engine test"
+          echo "========================================"
+
+          printf "uci\nisready\nquit\n" | ./androidfairy
+
+      - name: Create release package
+        run: |
+          echo "========================================"
+          echo " Creating AndroidFairy package"
+          echo "========================================"
+
+          mkdir -p release
+
+          cp src/androidfairy release/androidfairy
+          chmod +x release/androidfairy
+
+          printf '%s\n' \
+            'AndroidFairy' \
+            '============' \
+            '' \
+            'Fairy-Stockfish ARM64 Android engine.' \
+            '' \
+            'Target device:' \
+            'Huawei nova 11i' \
+            '' \
+            'CPU:' \
+            'Qualcomm Snapdragon 680' \
+            '' \
+            'Architecture:' \
+            'ARM64 / AArch64' \
+            'ARMv8' \
+            'NEON' \
+            'POPCNT' \
+            'Prefetch' \
+            '' \
+            'Optimization:' \
+            '-O3' \
+            'LTO' \
+            'Function/data sections' \
+            'Linker garbage collection' \
+            '' \
+            'Binary:' \
+            'androidfairy' \
+            '' \
+            'Type:' \
+            'UCI chess/variant engine' \
+            > release/README.txt
+
+          cd release
+
+          zip -9 \
+            ../androidfairy-android-arm64.zip \
+            androidfairy \
+            README.txt
+
+      - name: Upload AndroidFairy
+        uses: actions/upload-artifact@v4
+        with:
+          name: androidfairy-arm64
+          path: androidfairy-android-arm64.zip
+          if-no-files-found: error
+```
           test -f "$TOOLCHAIN/llvm-strip"
 
           echo "Android compiler:"
