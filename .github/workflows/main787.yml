@@ -188,7 +188,6 @@ jobs:
           name: androidfairy-arm64
           path: androidfairy-android-arm64.zip
           if-no-files-found: error
-```
           test -f "$TOOLCHAIN/llvm-strip"
 
           echo "Android compiler:"
