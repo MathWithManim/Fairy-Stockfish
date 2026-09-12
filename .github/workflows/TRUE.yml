@@ -1,4 +1,4 @@
-name: Build AndroidFairy TRUE 
+name: Build AndroidFairy TRUE
 
 on:
   workflow_dispatch:
@@ -33,15 +33,20 @@ jobs:
         run: |
           TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
 
-          echo "Checking Android compiler..."
+          echo "========================================"
+          echo "Checking Android compiler"
+          echo "========================================"
+
           test -x "$TOOLCHAIN/aarch64-linux-android21-clang++"
 
           echo "Checking llvm-strip..."
           test -x "$TOOLCHAIN/llvm-strip"
 
+          echo ""
           echo "Compiler version:"
           "$TOOLCHAIN/aarch64-linux-android21-clang++" --version
 
+          echo ""
           echo "NDK is ready."
 
       - name: Build AndroidFairy
@@ -66,6 +71,111 @@ jobs:
           echo "Building AndroidFairy ARM64"
           echo "========================================"
 
+          make -j"$(nproc)" \
+            ARCH=armv8 \
+            COMP=ndk \
+            optimize=yes \
+            all
+
+          echo ""
+          echo "========================================"
+          echo "Build completed"
+          echo "========================================"
+
+          test -f stockfish
+
+          mv stockfish androidfairy
+
+          chmod +x androidfairy
+
+          echo ""
+          echo "AndroidFairy binary created successfully."
+
+      - name: Strip AndroidFairy
+        working-directory: src
+        shell: bash
+        run: |
+          TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+
+          echo "========================================"
+          echo "Stripping AndroidFairy"
+          echo "========================================"
+
+          "$TOOLCHAIN/llvm-strip" --strip-all androidfairy
+
+          test -x androidfairy
+
+          echo ""
+          echo "Strip completed."
+
+      - name: Verify AndroidFairy
+        working-directory: src
+        shell: bash
+        run: |
+          echo "========================================"
+          echo "Binary information"
+          echo "========================================"
+
+          file androidfairy
+
+          echo ""
+          echo "Binary size:"
+          ls -lh androidfairy
+
+          echo ""
+          echo "========================================"
+          echo "Checking ARM64 Android binary"
+          echo "========================================"
+
+          file androidfairy | grep -q "ARM aarch64"
+
+          echo ""
+          echo "AndroidFairy ARM64 binary verified."
+
+      - name: Create AndroidFairy ZIP
+        shell: bash
+        run: |
+          echo "========================================"
+          echo "Creating ZIP"
+          echo "========================================"
+
+          rm -rf release
+
+          mkdir -p release
+
+          cp src/androidfairy release/androidfairy
+
+          chmod +x release/androidfairy
+
+          printf '%s\n' \
+            'AndroidFairy ARM64' \
+            'Fairy-Stockfish Android build' \
+            'Architecture: ARM64 / ARMv8' \
+            'Target: Android' \
+            'Optimized release build' \
+            > release/README.txt
+
+          cd release
+
+          zip -9 ../androidfairy-android-arm64.zip \
+            androidfairy \
+            README.txt
+
+          cd ..
+
+          echo ""
+          echo "========================================"
+          echo "ZIP created"
+          echo "========================================"
+
+          ls -lh androidfairy-android-arm64.zip
+
+      - name: Upload AndroidFairy
+        uses: actions/upload-artifact@v4
+        with:
+          name: androidfairy-arm64
+          path: androidfairy-android-arm64.zip
+          if-no-files-found: error
           make -j"$(nproc)" \
             ARCH=armv8 \
             COMP=ndk \
