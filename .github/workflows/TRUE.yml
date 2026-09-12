@@ -63,14 +63,14 @@ jobs:
 
           echo ""
           echo "========================================"
-          echo "Building ARM64 AndroidFairy"
+          echo "Building AndroidFairy ARM64"
           echo "========================================"
 
           make -j"$(nproc)" \
             ARCH=armv8 \
             COMP=ndk \
             optimize=yes \
-            build
+            all
 
           echo ""
           echo "========================================"
@@ -83,8 +83,8 @@ jobs:
 
           chmod +x androidfairy
 
-          echo "AndroidFairy binary created."
-
+          echo ""
+          echo "AndroidFairy binary created successfully."
       - name: Strip AndroidFairy
         working-directory: src
         shell: bash
