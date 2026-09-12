@@ -25,7 +25,6 @@ jobs:
         shell: bash
         run: |
           sdkmanager "ndk;27.2.12479018"
-
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
 
       - name: Verify Android NDK
@@ -33,8 +32,102 @@ jobs:
         run: |
           TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
 
-          echo "========================================"
-          echo "Checking Android compiler"
+          test -x "$TOOLCHAIN/aarch64-linux-android21-clang++"
+          test -x "$TOOLCHAIN/llvm-strip"
+
+          echo "Compiler:"
+          "$TOOLCHAIN/aarch64-linux-android21-clang++" --version
+
+          echo "NDK ready."
+
+      - name: Build AndroidFairy
+        working-directory: src
+        shell: bash
+        env:
+          EXTRACXXFLAGS: "-fomit-frame-pointer -ffunction-sections -fdata-sections"
+          EXTRALDFLAGS: "-Wl,--gc-sections"
+        run: |
+          TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export PATH="$TOOLCHAIN:$PATH"
+
+          echo "Cleaning old build..."
+          make clean
+
+          echo "Building AndroidFairy ARM64..."
+
+          make -j"$(nproc)" ARCH=armv8 COMP=ndk optimize=yes all
+
+          echo "Checking compiled binary..."
+
+          test -f stockfish
+
+          mv stockfish androidfairy
+          chmod +x androidfairy
+
+          echo "AndroidFairy binary created."
+
+      - name: Strip AndroidFairy
+        working-directory: src
+        shell: bash
+        run: |
+          TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+
+          "$TOOLCHAIN/llvm-strip" --strip-all androidfairy
+
+          test -x androidfairy
+
+          echo "AndroidFairy stripped successfully."
+
+      - name: Verify AndroidFairy
+        working-directory: src
+        shell: bash
+        run: |
+          echo "Binary information:"
+          file androidfairy
+
+          echo ""
+          echo "Binary size:"
+          ls -lh androidfairy
+
+          echo ""
+          echo "Checking ARM64..."
+
+          file androidfairy | grep -q "ARM aarch64"
+
+          echo "AndroidFairy ARM64 verified."
+
+      - name: Create AndroidFairy ZIP
+        shell: bash
+        run: |
+          rm -rf release
+          mkdir -p release
+
+          cp src/androidfairy release/androidfairy
+          chmod +x release/androidfairy
+
+          printf '%s\n' \
+            'AndroidFairy ARM64' \
+            'Fairy-Stockfish Android build' \
+            'Architecture: ARM64 / ARMv8' \
+            'Target: Android' \
+            'Optimized release build' \
+            > release/README.txt
+
+          cd release
+
+          zip -9 ../androidfairy-android-arm64.zip androidfairy README.txt
+
+          cd ..
+
+          echo "ZIP created:"
+          ls -lh androidfairy-android-arm64.zip
+
+      - name: Upload AndroidFairy
+        uses: actions/upload-artifact@v4
+        with:
+          name: androidfairy-arm64
+          path: androidfairy-android-arm64.zip
+          if-no-files-found: error          echo "Checking Android compiler"
           echo "========================================"
 
           test -x "$TOOLCHAIN/aarch64-linux-android21-clang++"
