@@ -47,47 +47,39 @@ jobs:
             -fomit-frame-pointer
             -ffunction-sections
             -fdata-sections
-
           EXTRALDFLAGS: >-
             -flto=full
             -Wl,--gc-sections
-
         run: |
           echo "========================================"
           echo " Building AndroidFairy"
           echo " Target: ARM64 / ARMv8"
           echo " Device: Huawei nova 11i"
-          echo " CPU: Qualcomm Snapdragon 680"
+          echo " CPU: Snapdragon 680"
           echo "========================================"
 
-          # Android NDK LLVM toolchain
+          # Android NDK compiler location
           export NDK_PATH="$ANDROID_NDK_HOME"
           export TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
 
-          # IMPORTANT:
-          # Fairy-Stockfish expects the Android compiler to be
-          # available through PATH.
+          # Make aarch64-linux-android21-clang++ available to Make
           export PATH="$TOOLCHAIN:$PATH"
 
           echo "NDK_PATH=$NDK_PATH"
           echo "TOOLCHAIN=$TOOLCHAIN"
 
           echo "========================================"
-          echo " Checking compiler"
+          echo " Checking Android compiler"
           echo "========================================"
 
           which aarch64-linux-android21-clang++
           aarch64-linux-android21-clang++ --version
 
           echo "========================================"
-          echo " Cleaning previous build"
+          echo " Building"
           echo "========================================"
 
           make clean
-
-          echo "========================================"
-          echo " Compiling"
-          echo "========================================"
 
           make -j"$(nproc)" \
             build \
@@ -96,13 +88,11 @@ jobs:
             optimize=yes
 
           echo "========================================"
-          echo " Renaming binary"
+          echo " Renaming"
           echo "========================================"
 
           mv fairy-stockfish androidfairy
-
-          chmod +x androidfairy
-
+          
       - name: Strip AndroidFairy
         working-directory: src
         run: |
