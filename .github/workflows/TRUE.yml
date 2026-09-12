@@ -1,25 +1,46 @@
-name: Build AndroidFairy TRUE
+name: Build AndroidFairy
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+  actions: write
 
 jobs:
   build:
     name: AndroidFairy ARM64
     runs-on: ubuntu-24.04
-
+    timeout-minutes: 60
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Cache Android NDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ANDROID_SDK_ROOT }}/ndk
+          key: ${{ runner.os }}-ndk-${{ hashFiles('**/build.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-ndk-
 
       - name: Install required packages
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip file
+          sudo apt-get install -y zip file build-essential
 
       - name: Install Android NDK
         shell: bash
@@ -34,6 +55,108 @@ jobs:
           test -x "$TOOLCHAIN/aarch64-linux-android21-clang++"
           test -x "$TOOLCHAIN/llvm-strip"
           echo "Compiler:"
+          "$TOOLCHAIN/aarch64-linux-android21-clang++" --version
+          echo "NDK ready."
+
+      - name: Verify repository structure
+        shell: bash
+        run: |
+          if [ ! -d "src" ]; then
+            echo "Error: src directory not found"
+            exit 1
+          fi
+          if [ ! -f "src/Makefile" ]; then
+            echo "Error: src/Makefile not found"
+            exit 1
+          fi
+          echo "Repository structure verified"
+
+      - name: Build AndroidFairy
+        working-directory: src
+        shell: bash
+        env:
+          EXTRACXXFLAGS: "-fomit-frame-pointer -ffunction-sections -fdata-sections"
+          EXTRALDFLAGS: "-Wl,--gc-sections"
+        run: |
+          TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export PATH="$TOOLCHAIN:$PATH"
+          echo "Cleaning old build..."
+          make clean || echo "No previous build to clean"
+          echo "Building AndroidFairy ARM64..."
+          make -j"$(nproc)" ARCH=armv8 COMP=ndk optimize=yes all
+          echo "Checking compiled binary..."
+          if [ ! -f "stockfish" ]; then
+            echo "Error: stockfish binary not found after build"
+            exit 1
+          fi
+          mv stockfish androidfairy
+          chmod +x androidfairy
+          echo "AndroidFairy binary created."
+
+      - name: Strip AndroidFairy
+        working-directory: src
+        shell: bash
+        run: |
+          TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          "$TOOLCHAIN/llvm-strip" --strip-all androidfairy
+          test -x androidfairy
+          echo "AndroidFairy stripped successfully."
+
+      - name: Verify AndroidFairy
+        working-directory: src
+        shell: bash
+        run: |
+          echo "Binary information:"
+          file androidfairy
+          echo ""
+          echo "Binary size:"
+          ls -lh androidfairy
+          echo ""
+          echo "Checking ARM64..."
+          if ! file androidfairy | grep -q "ARM aarch64"; then
+            echo "Error: Binary is not ARM64"
+            exit 1
+          fi
+          echo "AndroidFairy ARM64 verified."
+
+      - name: Create AndroidFairy ZIP
+        shell: bash
+        run: |
+          rm -rf release
+          mkdir -p release
+          cp src/androidfairy release/androidfairy
+          chmod +x release/androidfairy
+          cat > release/README.txt << EOF
+          AndroidFairy ARM64
+          Fairy-Stockfish Android build
+          Architecture: ARM64 / ARMv8
+          Target: Android
+          Optimized release build
+          Build: ${{ github.run_number }}
+          Commit: ${{ github.sha }}
+          EOF
+          cd release
+          zip -9 ../androidfairy-android-arm64.zip androidfairy README.txt
+          cd ..
+          echo "ZIP created:"
+          ls -lh androidfairy-android-arm64.zip
+
+      - name: Upload AndroidFairy
+        uses: actions/upload-artifact@v4
+        with:
+          name: androidfairy-arm64-${{ github.run_number }}
+          path: androidfairy-android-arm64.zip
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Build Summary
+        if: always()
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run Number**: ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           "$TOOLCHAIN/aarch64-linux-android21-clang++" --version
           echo "NDK ready."
 
