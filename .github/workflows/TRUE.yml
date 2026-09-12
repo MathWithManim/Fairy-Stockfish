@@ -1,4 +1,4 @@
-name: Build AndroidFairy
+name: Build AndroidFairy TRUE 
 
 on:
   workflow_dispatch:
