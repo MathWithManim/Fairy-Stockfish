@@ -57,40 +57,22 @@ jobs:
           EXTRALDFLAGS: "-Wl,--gc-sections"
         run: |
           TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-
           export PATH="$TOOLCHAIN:$PATH"
 
-          echo "========================================"
-          echo "Cleaning old build"
-          echo "========================================"
-
+          echo "Cleaning old build..."
           make clean
 
-          echo ""
-          echo "========================================"
-          echo "Building AndroidFairy ARM64"
-          echo "========================================"
+          echo "Building AndroidFairy ARM64..."
 
-          make -j"$(nproc)" \
-            ARCH=armv8 \
-            COMP=ndk \
-            optimize=yes \
-            all
+          make -j"$(nproc)" ARCH=armv8 COMP=ndk optimize=yes all
 
-          echo ""
-          echo "========================================"
-          echo "Build completed"
-          echo "========================================"
-
+          echo "Checking compiled binary..."
           test -f stockfish
 
           mv stockfish androidfairy
-
           chmod +x androidfairy
 
-          echo ""
-          echo "AndroidFairy binary created successfully."
-
+          echo "AndroidFairy binary created."
       - name: Strip AndroidFairy
         working-directory: src
         shell: bash
