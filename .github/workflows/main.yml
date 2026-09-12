@@ -1,0 +1,119 @@
+name: Build AndroidFairy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Build AndroidFairy - Snapdragon 680
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Fairy-Stockfish
+        uses: actions/checkout@v4
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Locate Android NDK
+        run: |
+          echo "NDK: $ANDROID_NDK_LATEST_HOME"
+          test -d "$ANDROID_NDK_LATEST_HOME"
+
+      - name: Build AndroidFairy
+        working-directory: src
+        env:
+          # Extra optimizations on top of Fairy-Stockfish's
+          # built-in ARMv8 / NEON / POPCNT / -O3 settings.
+          EXTRACXXFLAGS: >-
+            -flto=full
+            -fomit-frame-pointer
+            -ffunction-sections
+            -fdata-sections
+          EXTRALDFLAGS: >-
+            -flto=full
+            -Wl,--gc-sections
+        run: |
+          echo "========================================"
+          echo " Building AndroidFairy"
+          echo " Target: ARM64 / ARMv8"
+          echo " Device: Huawei nova 11i"
+          echo " CPU: Snapdragon 680"
+          echo "========================================"
+
+          make clean
+
+          make -j"$(nproc)" \
+            build \
+            ARCH=armv8 \
+            COMP=ndk
+
+          echo "========================================"
+          echo " Renaming binary"
+          echo "========================================"
+
+          mv fairy-stockfish androidfairy
+
+          echo "========================================"
+          echo " Stripping binary"
+          echo "========================================"
+
+          "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" \
+            --strip-all \
+            androidfairy
+
+          chmod +x androidfairy
+
+          echo "========================================"
+          echo " Binary information"
+          echo "========================================"
+
+          file androidfairy
+          ls -lh androidfairy
+
+          echo "========================================"
+          echo " UCI test"
+          echo "========================================"
+
+          printf "uci\nisready\nquit\n" | ./androidfairy
+
+      - name: Package AndroidFairy
+        run: |
+          mkdir -p release
+
+          cp src/androidfairy release/androidfairy
+          chmod +x release/androidfairy
+
+          cat > release/README.txt <<'EOF'
+          AndroidFairy
+          ============
+
+          Fairy-Stockfish ARM64 build optimized for:
+          Huawei nova 11i
+          Qualcomm Snapdragon 680
+
+          Architecture:
+          ARM64 / AArch64
+          ARMv8
+          NEON
+          POPCNT
+
+          Binary:
+          androidfairy
+
+          UCI engine.
+          EOF
+
+          cd release
+          zip -9 ../androidfairy-android-arm64.zip \
+            androidfairy \
+            README.txt
+
+      - name: Upload AndroidFairy binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: androidfairy-arm64
+          path: |
+            src/androidfairy
+            androidfairy-android-arm64.zip
+          if-no-files-found: error
