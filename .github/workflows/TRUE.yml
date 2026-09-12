@@ -1,0 +1,98 @@
+name: Build AndroidFairy TRUE
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: AndroidFairy ARM64
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip file
+
+      - name: Install Android NDK
+        run: |
+          sdkmanager "ndk;27.2.12479018"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Verify NDK
+        run: |
+          TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+
+          test -x "$TOOLCHAIN/aarch64-linux-android21-clang++"
+          test -x "$TOOLCHAIN/llvm-strip"
+
+          echo "Compiler:"
+          "$TOOLCHAIN/aarch64-linux-android21-clang++" --version
+
+      - name: Build AndroidFairy
+        working-directory: src
+        env:
+          EXTRACXXFLAGS: "-fomit-frame-pointer -ffunction-sections -fdata-sections"
+          EXTRALDFLAGS: "-Wl,--gc-sections"
+        run: |
+          TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export PATH="$TOOLCHAIN:$PATH"
+
+          make clean
+
+          make -j"$(nproc)" \
+            ARCH=armv8 \
+            COMP=ndk \
+            optimize=yes \
+            build
+
+          test -f fairy-stockfish
+
+          mv fairy-stockfish androidfairy
+          chmod +x androidfairy
+
+      - name: Strip binary
+        working-directory: src
+        run: |
+          TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+
+          "$TOOLCHAIN/llvm-strip" --strip-all androidfairy
+
+          test -x androidfairy
+
+      - name: Test binary
+        working-directory: src
+        run: |
+          file androidfairy
+          ls -lh androidfairy
+
+          printf 'uci\nisready\nquit\n' | ./androidfairy
+
+      - name: Package
+        run: |
+          rm -rf release
+          mkdir -p release
+
+          cp src/androidfairy release/androidfairy
+
+          printf '%s\n' \
+            'AndroidFairy ARM64' \
+            'Fairy-Stockfish Android build' \
+            'ARM64 / ARMv8' \
+            > release/README.txt
+
+          cd release
+          zip -9 ../androidfairy-android-arm64.zip androidfairy README.txt
+
+      - name: Upload AndroidFairy
+        uses: actions/upload-artifact@v4
+        with:
+          name: androidfairy-arm64
+          path: androidfairy-android-arm64.zip
+          if-no-files-found: error 
